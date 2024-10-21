@@ -1,0 +1,18 @@
+[package]
+name = "simple-slotmap"
+version = "0.1.0"
+edition = "2021"
+
+license = "MIT OR Apache-2.0"
+description = """
+A simple implementation of the slotmap data structure. Uses versioned keys to directly index into a backing Vec.
+"""
+repository = "https://github.com/catnapper321/simple-slotmap"
+keywords = ["slotmap"]
+categories = []
+
+[lib]
+path = "src/lib.rs"
+crate-type = ["lib"]
+
+[dependencies]
