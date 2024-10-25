@@ -44,23 +44,27 @@ impl<T> From<Key<T>> for u64 {
 }
 
 /// A key-value data structure that stores values in a Vec for O(1)
-/// retrievals. Worst case adds are O(n). Adds permanently transfer
-/// ownership into the data store; it is not possible to move values out.
-/// Keys are weak and versioned: the value in the referenced slot may be
-/// dropped at any time, and subsequent retrievals with the same key will
-/// fail. Up to u32::MAX generations are supported; overflowing this will
-/// cause a panic. Up to u32::MAX slots are supported.
-/// The phantom type specifies the `Key` type that will be used by the
-/// Slots instance. This provides compile time checking to help prevent
-/// keys from different Slots from being used with the wrong instance.
-pub struct Slots<K, V> {
+/// retrievals. Worst case adds are O(n). Adding a value permanently
+/// transfers ownership into the data store; it is not possible to move
+/// values out. Keys are weak and versioned: the value in the referenced
+/// slot may be dropped at any time, and subsequent retrievals with the
+/// same key will fail. Up to u32::MAX generations are supported;
+/// overflowing this will cause a panic. Up to u32::MAX slots are
+/// supported. The phantom type specifies the `Key` type that will be used
+/// by the Slots instance. This provides compile time checking to help
+/// prevent keys from different Slots from being used with the wrong
+/// instance.
+///
+/// This thing is an essentially an allocator that hands out versioned
+/// indexes instead of pointers directly into memory.
+pub struct Slots<K: Clone + Copy, V> {
     max_slots: usize,
     generation: u32,
     // u32 is the generation number
     data: Vec<(u32, V)>,
     _t: PhantomData<K>
 }
-impl<K, V> Slots<K, V> {
+impl<K: Clone + Copy, V> Slots<K, V> {
     pub fn new(initial_slots: usize, max_slots: usize) -> Self {
         let data = Vec::with_capacity(initial_slots);
         Self {
@@ -110,15 +114,14 @@ impl<K, V> Slots<K, V> {
         }
         None
     }
-    /// adds a new value, returns the key. Performance is O(n), worst case.
-    pub fn add(&mut self, value: V) -> Key<K> {
+    // returns index, generation
+    fn next_key(&mut self) -> (SlotOperation, usize, u32) {
         let generation = self.increment_generation();
         // linear search for available slot
-        for (index, (old_generation, old_value)) in self.data.iter_mut().enumerate() {
+        for (index, (old_generation, _old_value)) in self.data.iter_mut().enumerate() {
             if *old_generation == 0 {
-                *old_value = value;
                 *old_generation = generation;
-                return Key::new(index as u32, generation);
+                return (SlotOperation::Reuse, index, generation);
             }
         }
         // need a new slot... ensure that max_slots is not exceeded
@@ -126,9 +129,55 @@ impl<K, V> Slots<K, V> {
             panic!("max slots exceeded");
         }
         // make the new slot
-        let index = self.data.len() as u32;
-        self.data.push((generation, value));
-        Key::new(index, generation)
+        let index = self.data.len();
+        (SlotOperation::Push, index, generation)
+    }
+    /// adds a new value, returns the key. Performance is O(n), worst case.
+    pub fn add(&mut self, value: V) -> Key<K> {
+        let (op, index, generation) = self.next_key();
+        match op {
+            SlotOperation::Push => {
+                self.data.push((generation, value));
+            },
+            SlotOperation::Reuse => {
+                self.data[index] = (generation, value);
+            },
+        }
+        Key { index: index as u32, generation, _t: Default::default() }
+        // let generation = self.increment_generation();
+        // // linear search for available slot
+        // for (index, (old_generation, old_value)) in self.data.iter_mut().enumerate() {
+        //     if *old_generation == 0 {
+        //         *old_value = value;
+        //         *old_generation = generation;
+        //         return Key::new(index as u32, generation);
+        //     }
+        // }
+        // // need a new slot... ensure that max_slots is not exceeded
+        // if self.data.len() >= self.max_slots {
+        //     panic!("max slots exceeded");
+        // }
+        // // make the new slot
+        // let index = self.data.len() as u32;
+        // self.data.push((generation, value));
+        // Key::new(index, generation)
+    }
+    pub fn with_reservation<F>(&mut self, f: F) -> Key<K> 
+    where
+        F: FnOnce(Key<K>) -> V
+    {
+        let (op, index, generation) = self.next_key();
+        let key = Key { index: index as u32, generation, _t: Default::default() };
+        let value = f(key);
+        match op {
+            SlotOperation::Push => {
+                self.data.push((generation, value));
+            },
+            SlotOperation::Reuse => {
+                self.data[index] = (generation, value);
+            },
+        }
+        key
     }
     /// returns a key that increments the generation, guaranteeing
     /// uniqueness. The index part of the key is set to zero.
@@ -140,4 +189,9 @@ impl<K, V> Slots<K, V> {
     pub fn iter(&self) -> std::slice::Iter<(u32, V)> {
         self.data.iter()
     }
+}
+
+enum SlotOperation {
+    Push,
+    Reuse,
 }
