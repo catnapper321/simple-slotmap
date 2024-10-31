@@ -115,7 +115,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         None
     }
     // returns index, generation
-    pub fn reserve_key(&mut self) -> Key<K> {
+    pub fn reserve_slot(&mut self) -> Key<K> {
         let generation = self.increment_generation();
         // linear search for available slot
         for (index, slot) in self.data.iter_mut().enumerate() {
@@ -135,7 +135,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     }
     /// adds a new value, returns the key. Performance is O(n), worst case.
     pub fn add(&mut self, value: V) -> Key<K> {
-        let key = self.reserve_key();
+        let key = self.reserve_slot();
         self.data[key.index as usize] = Slot::Value(key.generation, value);
         key
     }
