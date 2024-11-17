@@ -46,15 +46,14 @@ impl<T> From<Key<T>> for u64 {
 
 /// A key-value data structure that stores values in a Vec for O(1)
 /// retrievals. Worst case adds are O(n). Adding a value permanently
-/// transfers ownership into the data store; it is not possible to move
-/// values out. Keys are weak and versioned: the value in the referenced
-/// slot may be dropped at any time, and subsequent retrievals with the
-/// same key will fail. Up to u32::MAX generations are supported;
-/// overflowing this will cause a panic. Up to u32::MAX slots are
-/// supported. The phantom type specifies the `Key` type that will be used
-/// by the Slots instance. This provides compile time checking to help
-/// prevent keys from different Slots from being used with the wrong
-/// instance.
+/// transfers ownership into the data store. Keys are weak and versioned:
+/// the value in the referenced slot may be dropped at any time, and
+/// subsequent retrievals with the same key will fail. Up to u32::MAX
+/// generations are supported; overflowing this will cause a panic. Up to
+/// u32::MAX slots are supported. The phantom type specifies the `Key` type
+/// that will be used by the Slots instance. This provides compile time
+/// checking to help prevent keys from different Slots from being used with
+/// the wrong instance.
 ///
 /// This thing is an essentially an allocator that hands out versioned
 /// indexes instead of pointers directly into memory.
@@ -94,6 +93,16 @@ impl<K: Clone + Copy, V> Slots<K, V> {
             }
         }
         false
+    }
+    /// Returns the value stored with the provided key, freeing the slot. O(1).
+    pub fn take(&mut self, key: Key<K>) -> Option<V> {
+        let index = key.index() as usize;
+        if let Some(slot) = self.data.get_mut(index) {
+            let gen = key.generation();
+            slot.take(gen)
+        } else {
+            None
+        }
     }
     /// Returns a reference for the value at the given key. This is an O(1)
     /// operation.
@@ -182,4 +191,24 @@ enum Slot<V> {
     Empty,
     Reserved(u32),
     Value(u32, V),
+}
+impl<V> Slot<V> {
+    // compares generation before taking
+    fn take(&mut self, generation: u32) -> Option<V> {
+        if let Self::Value(slot_generation, _) = self {
+            if generation == *slot_generation {
+                return self.take_unchecked()
+            }
+        }
+        None
+    }
+    // unconditionally returns a stored value
+    fn take_unchecked(&mut self) -> Option<V> {
+        let mut slot = Slot::Empty;
+        std::mem::swap(&mut slot, self); 
+        match slot {
+            Self::Value(_, v) => Some(v),
+            _ => None
+        }
+    }
 }
