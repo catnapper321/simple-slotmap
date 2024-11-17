@@ -84,7 +84,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         panic!("Generation overflow");
     }
     /// Drops the value stored in the slot. Returns true if the slot was
-    /// occupied. Performance is O(1).
+    /// occupied. This is an O(1) operation.
     pub fn remove(&mut self, key: Key<K>) -> bool {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, _)) = self.data.get(index) {
@@ -95,7 +95,8 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         }
         false
     }
-    /// returns a reference for the value at the given key 
+    /// Returns a reference for the value at the given key. This is an O(1)
+    /// operation.
     pub fn get(&self, key: Key<K>) -> Option<&V> {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, value)) = self.data.get(index) {
@@ -105,7 +106,8 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         }
         None
     }
-    /// returns a mutable reference for the value at the given key 
+    /// returns a mutable reference for the value at the given key. This is
+    /// an O(1) operation.
     pub fn get_mut(&mut self, key: Key<K>) -> Option<&mut V> {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, value)) = self.data.get_mut(index) {
@@ -115,7 +117,8 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         }
         None
     }
-    // returns index, generation
+    /// Reserves a slot and returns the key to use with a future
+    /// `.with_reservation()` function call. This is an O(n) operation.
     pub fn reserve_slot(&mut self) -> Key<K> {
         let generation = self.increment_generation();
         // linear search for available slot
@@ -134,6 +137,17 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         self.data.push(Slot::Reserved(generation));
         Key::new(index as u32, generation)
     }
+    /// Adds the value returned by the closure to the next available slot.
+    ///
+    /// The closure takes the key as its sole argument, and returns a Result with
+    /// the value to insert into the slot. Note that you will need to provide the error
+    /// type returned by the closure, for example via turbofish notation:
+    /// ```
+    /// let new_key = slots.add_with::<MyErrorType>(|key| {
+    ///     let thing = Something.new()?;
+    ///     Ok(thing)
+    /// })?;
+    /// ```
     pub fn add_with<E: std::error::Error>(&mut self, f: impl FnOnce(Key<K>) -> Result<V, E>) -> Result<Key<K>, E> {
         let key = self.reserve_slot();
         f(key).map(|v| { self.with_reservation(key, v); key })
@@ -144,7 +158,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         self.data[key.index as usize] = Slot::Value(key.generation, value);
         key
     }
-    /// assigns a value to a reserved slot
+    /// Assigns a value to a reserved slot. This is an O(1) operation.
     pub fn with_reservation(&mut self, key: Key<K>, value: V) {
         if let Some(Slot::Reserved(res_gen)) = self.data.get(key.index as usize) {
             if *res_gen == key.generation {
