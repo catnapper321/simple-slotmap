@@ -11,7 +11,8 @@ pub struct Key<T> {
     generation: u32,
     _t: PhantomData<T>
 }
-impl<T> Key<T> {
+impl<T> Key<T>
+{
     fn new(index: u32, generation: u32) -> Self {
         Self {
             index,
@@ -132,6 +133,10 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         let index = self.data.len();
         self.data.push(Slot::Reserved(generation));
         Key::new(index as u32, generation)
+    }
+    pub fn add_with<E: std::error::Error>(&mut self, f: impl FnOnce(Key<K>) -> Result<V, E>) -> Result<Key<K>, E> {
+        let key = self.reserve_slot();
+        f(key).map(|v| { self.with_reservation(key, v); key })
     }
     /// adds a new value, returns the key. Performance is O(n), worst case.
     pub fn add(&mut self, value: V) -> Key<K> {
