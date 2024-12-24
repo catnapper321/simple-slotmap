@@ -8,26 +8,21 @@ use std::marker::PhantomData;
 pub struct KeyInner<T> {
     index: u32,
     generation: u32,
-    _t: PhantomData<T>
+    _t: PhantomData<T>,
 }
 #[derive(Clone, Copy)]
 #[repr(C)]
-// pub struct Key<T> {
 pub union Key<T: Copy> {
     x: u64,
     inner: KeyInner<T>,
-    // index: u32,
-    // generation: u32,
-    // _t: PhantomData<T>
 }
-impl<T: Copy> Key<T>
-{
+impl<T: Copy> Key<T> {
     fn new(index: u32, generation: u32) -> Self {
         Self {
             inner: KeyInner {
                 index,
                 generation,
-                _t: PhantomData::default()
+                _t: PhantomData::default(),
             },
         }
     }
@@ -57,7 +52,12 @@ impl<T: Copy> From<Key<T>> for u64 {
 impl<T: Copy> std::fmt::Debug for Key<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Key <")?;
-        unsafe { f.write_fmt(format_args!("gen: {}, index: {}", self.inner.generation, self.inner.index)) }?;
+        unsafe {
+            f.write_fmt(format_args!(
+                "gen: {}, index: {}",
+                self.inner.generation, self.inner.index
+            ))
+        }?;
         f.write_str(">")
     }
 }
@@ -66,7 +66,6 @@ impl<T: Copy> std::fmt::Display for Key<T> {
         std::fmt::Debug::fmt(self, f)
     }
 }
-
 
 /// A key-value data structure that stores values in a Vec for O(1)
 /// retrievals. Worst case adds are O(n). Adding a value permanently
@@ -86,7 +85,7 @@ pub struct Slots<K: Clone + Copy, V> {
     generation: u32,
     // u32 is the generation number
     data: Vec<Slot<V>>,
-    _t: PhantomData<K>
+    _t: PhantomData<K>,
 }
 impl<K: Clone + Copy, V> Slots<K, V> {
     pub fn new(initial_slots: usize, max_slots: usize) -> Self {
@@ -95,7 +94,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
             max_slots,
             generation: 0,
             data,
-            _t: PhantomData::default()
+            _t: PhantomData::default(),
         }
     }
     // returns next generation
@@ -181,9 +180,15 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     ///     Ok(thing)
     /// })?;
     /// ```
-    pub fn add_with<E: std::error::Error>(&mut self, f: impl FnOnce(Key<K>) -> Result<V, E>) -> Result<Key<K>, E> {
+    pub fn add_with<E: std::error::Error>(
+        &mut self,
+        f: impl FnOnce(Key<K>) -> Result<V, E>,
+    ) -> Result<Key<K>, E> {
         let key = self.reserve_slot();
-        f(key).map(|v| { self.with_reservation(key, v); key })
+        f(key).map(|v| {
+            self.with_reservation(key, v);
+            key
+        })
     }
     /// adds a new value, returns the key. Performance is O(n), worst case.
     pub fn add(&mut self, value: V) -> Key<K> {
@@ -221,7 +226,7 @@ impl<V> Slot<V> {
     fn take(&mut self, generation: u32) -> Option<V> {
         if let Self::Value(slot_generation, _) = self {
             if generation == *slot_generation {
-                return self.take_unchecked()
+                return self.take_unchecked();
             }
         }
         None
@@ -229,10 +234,10 @@ impl<V> Slot<V> {
     // unconditionally returns a stored value
     fn take_unchecked(&mut self) -> Option<V> {
         let mut slot = Slot::Empty;
-        std::mem::swap(&mut slot, self); 
+        std::mem::swap(&mut slot, self);
         match slot {
             Self::Value(_, v) => Some(v),
-            _ => None
+            _ => None,
         }
     }
 }
