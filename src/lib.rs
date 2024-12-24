@@ -54,6 +54,19 @@ impl<T: Copy> From<Key<T>> for u64 {
         unsafe { value.x }
     }
 }
+impl<T: Copy> std::fmt::Debug for Key<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Key <")?;
+        unsafe { f.write_fmt(format_args!("gen: {}, index: {}", self.inner.generation, self.inner.index)) }?;
+        f.write_str(">")
+    }
+}
+impl<T: Copy> std::fmt::Display for Key<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
 
 /// A key-value data structure that stores values in a Vec for O(1)
 /// retrievals. Worst case adds are O(n). Adding a value permanently
