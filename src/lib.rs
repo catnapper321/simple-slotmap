@@ -4,43 +4,54 @@ use std::marker::PhantomData;
 /// structure. Converts to/from a u64 using `From` trait implementations.
 /// The phantom type allows the keys from different Slots instances to be
 /// identified for compile time checking.
-#[derive(Debug, Clone, Copy)]
-#[repr(C)]
-pub struct Key<T> {
+#[derive(Clone, Copy, Debug)]
+pub struct KeyInner<T> {
     index: u32,
     generation: u32,
     _t: PhantomData<T>
 }
-impl<T> Key<T>
+#[derive(Clone, Copy)]
+#[repr(C)]
+// pub struct Key<T> {
+pub union Key<T: Copy> {
+    x: u64,
+    inner: KeyInner<T>,
+    // index: u32,
+    // generation: u32,
+    // _t: PhantomData<T>
+}
+impl<T: Copy> Key<T>
 {
     fn new(index: u32, generation: u32) -> Self {
         Self {
-            index,
-            generation,
-            _t: PhantomData::default()
+            inner: KeyInner {
+                index,
+                generation,
+                _t: PhantomData::default()
+            },
         }
     }
     fn index(&self) -> u32 {
-        self.index
+        unsafe { self.inner.index }
     }
     fn generation(&self) -> u32 {
-        self.generation
+        unsafe { self.inner.generation }
     }
 }
-impl<T> PartialEq for Key<T> {
+impl<T: Copy> PartialEq for Key<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.index() == other.index() && self.generation() == other.generation()
+        unsafe { self.x == other.x }
     }
 }
 
-impl<T> From<u64> for Key<T> {
+impl<T: Copy> From<u64> for Key<T> {
     fn from(value: u64) -> Self {
-        unsafe { std::mem::transmute(value) }
+        Self { x: value }
     }
 }
-impl<T> From<Key<T>> for u64 {
+impl<T: Copy> From<Key<T>> for u64 {
     fn from(value: Key<T>) -> Self {
-        unsafe { std::mem::transmute(value) }
+        unsafe { value.x }
     }
 }
 
@@ -87,7 +98,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     pub fn remove(&mut self, key: Key<K>) -> bool {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, _)) = self.data.get(index) {
-            if *gen == key.generation {
+            if *gen == key.generation() {
                 self.data[index] = Slot::Empty;
                 return true;
             }
@@ -109,7 +120,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     pub fn get(&self, key: Key<K>) -> Option<&V> {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, value)) = self.data.get(index) {
-            if *gen == key.generation {
+            if *gen == key.generation() {
                 return Some(value);
             }
         }
@@ -120,7 +131,7 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     pub fn get_mut(&mut self, key: Key<K>) -> Option<&mut V> {
         let index = key.index() as usize;
         if let Some(Slot::Value(gen, value)) = self.data.get_mut(index) {
-            if *gen == key.generation {
+            if *gen == key.generation() {
                 return Some(value);
             }
         }
@@ -164,14 +175,14 @@ impl<K: Clone + Copy, V> Slots<K, V> {
     /// adds a new value, returns the key. Performance is O(n), worst case.
     pub fn add(&mut self, value: V) -> Key<K> {
         let key = self.reserve_slot();
-        self.data[key.index as usize] = Slot::Value(key.generation, value);
+        self.data[key.index() as usize] = Slot::Value(key.generation(), value);
         key
     }
     /// Assigns a value to a reserved slot. This is an O(1) operation.
     pub fn with_reservation(&mut self, key: Key<K>, value: V) {
-        if let Some(Slot::Reserved(res_gen)) = self.data.get(key.index as usize) {
-            if *res_gen == key.generation {
-                self.data[key.index as usize] = Slot::Value(*res_gen, value);
+        if let Some(Slot::Reserved(res_gen)) = self.data.get(key.index() as usize) {
+            if *res_gen == key.generation() {
+                self.data[key.index() as usize] = Slot::Value(*res_gen, value);
             }
         }
     }
