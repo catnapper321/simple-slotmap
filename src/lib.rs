@@ -196,6 +196,18 @@ impl<K: Clone + Copy, V> Slots<K, V> {
         self.data[key.index() as usize] = Slot::Value(key.generation(), value);
         key
     }
+    // pub fn add_and_return_ref(&mut self, value: V) -> (Key<K>, &V) {
+    //     let key = self.reserve_slot();
+    //     self.data[key.index() as usize] = Slot::Value(key.generation(), value);
+    //     let val_ref = self.get(key).unwrap();
+    //     (key, val_ref)
+    // }
+    // pub fn add_and_return_mut(&mut self, value: V) -> (Key<K>, &mut V) {
+    //     let key = self.reserve_slot();
+    //     self.data[key.index() as usize] = Slot::Value(key.generation(), value);
+    //     let val_ref = self.get_mut(key).unwrap();
+    //     (key, val_ref)
+    // }
     /// Assigns a value to a reserved slot. This is an O(1) operation.
     pub fn with_reservation(&mut self, key: Key<K>, value: V) {
         if let Some(Slot::Reserved(res_gen)) = self.data.get(key.index() as usize) {
