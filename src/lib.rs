@@ -23,7 +23,7 @@ pub union Key<V> {
 }
 impl<V> Key<V> {
     fn new(index: usize, generation: u32) -> Result<Self, Error> {
-        if index as u32 == u32::MAX {
+        if index as u32 >= u32::MAX {
             return Err(Error::IndexOutOfBounds)
         }
         Ok(Self {
